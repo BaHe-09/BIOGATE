@@ -1,0 +1,9 @@
+# .gitignore
+# Excluir variables de entorno (contienen credenciales)
+.env
+
+# Excluir entorno virtual de Python
+.venv/
+
+# Excluir caché de Python
+__pycache__/
