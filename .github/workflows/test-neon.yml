@@ -6,10 +6,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - run: pip install psycopg2-binary python-dotenv
-      - run: python test_neon.py
+
+      - name: Install dependencies
+        run: pip install psycopg2-binary python-dotenv
+
+      - name: Test Neon Connection
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          echo "Probando conexión a Neon..."
+          python test_neon.py
