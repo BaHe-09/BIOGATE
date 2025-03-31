@@ -49,7 +49,7 @@ def test_crud_operations(conn, existing_tables):
         # READ
         cursor.execute("SELECT nombre FROM personas WHERE id_persona = %s", (persona_id,))
         result = cursor.fetchone()
-        print(f"📝 Registro leído: {result[0]}")
+        print(f"Registro leído: {result[0]}")
 
         # UPDATE
         cursor.execute("""
@@ -58,16 +58,16 @@ def test_crud_operations(conn, existing_tables):
             RETURNING activo
         """, (persona_id,))
         updated = cursor.fetchone()[0]
-        print(f"🔄 Registro actualizado (activo={updated})")
+        print(f"Registro actualizado (activo={updated})")
 
         # DELETE (limpieza)
         cursor.execute("DELETE FROM personas WHERE id_persona = %s", (persona_id,))
         conn.commit()
-        print("🧹 Datos de prueba eliminados")
+        print("Datos de prueba eliminados")
 
     except Exception as e:
         conn.rollback()
-        print(f"❌ Error en operaciones CRUD: {e}")
+        print(f"Error en operaciones CRUD: {e}")
 
 def test_connection():
     """Prueba principal de conexión y funcionalidad"""
@@ -87,12 +87,12 @@ def test_connection():
         print(f"\n🔍 Extensión vectorial: {'✅ Activa' if cursor.fetchone()[0] else '❌ Faltante'}")
 
         # 3. Verificar tablas
-        print("\n📊 Verificando estructura de la base de datos...")
+        print("\nVerificando estructura de la base de datos...")
         existing_tables = verify_tables(cursor)
 
         # 4. Pruebas CRUD
         if existing_tables:
-            print("\n🧪 Probando operaciones CRUD...")
+            print("\nProbando operaciones CRUD...")
             test_crud_operations(conn, existing_tables)
 
         # 5. Verificar índices (opcional)
