@@ -72,7 +72,7 @@ def test_crud_operations(conn, existing_tables):
 def test_connection():
     """Prueba principal de conexión y funcionalidad"""
     print("\n" + "="*50)
-    print("🚀 Iniciando pruebas de Neon DB")
+    print("Iniciando pruebas de Neon DB")
     print("="*50)
     
     conn = None
@@ -80,7 +80,7 @@ def test_connection():
         # 1. Conexión SSL
         conn = psycopg2.connect(DATABASE_URL, sslmode="require")
         cursor = conn.cursor()
-        print("\n✅ Conexión SSL establecida correctamente")
+        print("\n--- Conexión SSL establecida correctamente ---")
 
         # 2. Verificar extensión vectorial
         cursor.execute("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')")
