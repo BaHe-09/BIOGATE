@@ -84,7 +84,7 @@ def test_connection():
 
         # 2. Verificar extensión vectorial
         cursor.execute("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')")
-        print(f"\n🔍 Extensión vectorial: {'✅ Activa' if cursor.fetchone()[0] else '❌ Faltante'}")
+        print(f"\nExtensión vectorial: {'✅ Activa' if cursor.fetchone()[0] else '❌ Faltante'}")
 
         # 3. Verificar tablas
         print("\nVerificando estructura de la base de datos...")
