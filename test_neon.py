@@ -24,7 +24,7 @@ def verify_tables(cursor):
     if missing_tables:
         print(f"⚠️ Tablas faltantes: {', '.join(missing_tables)}")
     else:
-        print("✅ Todas las tablas esenciales existen")
+        print("Todas las tablas esenciales existen")
     
     return existing_tables
 
@@ -102,7 +102,7 @@ def test_connection():
                 WHERE tablename = 'embeddings_faciales'
                 AND indexdef LIKE '%ivfflat%'
             """)
-            print(f"\n🔎 Índice vectorial encontrado: {'✅ Sí' if cursor.fetchone() else '❌ No'}")
+            print(f"\n Índice vectorial encontrado: {'✅ Sí' if cursor.fetchone() else '❌ No'}")
 
     except OperationalError as e:
         print(f"\n❌ Error de conexión: {e}")
