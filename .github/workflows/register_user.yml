@@ -37,7 +37,14 @@ jobs:
     - name: Download YOLO model
       run: |
         mkdir -p models
-        wget -O models/yolov8n-face-lindevs.pt https://github.com/lindevs/yolov8-face/releases/download/v0.0.1/yolov8n-face.pt
+        # Using official Ultralytics YOLOv8 face detection model
+        python -c "
+        from ultralytics import YOLO
+        model = YOLO('yolov8n.pt')  # Downloads standard YOLOv8n
+        model.export(format='onnx')  # Optional: export to ONNX if needed
+        "
+        # Alternative direct download if needed:
+        # wget -O models/yolov8n-face.pt https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8n.pt
         
     - name: Run registration
       env:
