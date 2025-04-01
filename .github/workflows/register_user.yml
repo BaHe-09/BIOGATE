@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       person_name:
-        description: 'Nombre de la persona (debe coincidir con la carpeta en dataset/)'
+        description: 'Nombre de la persona (ubicada en el dataset)'
         required: true
         default: 'persona1'
       skip_model_download:
