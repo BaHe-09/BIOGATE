@@ -90,7 +90,7 @@ def register_person(full_name, folder_name):
                     registered += len(embeddings)
         
         conn.commit()
-        print(f"\n✅ Registro completado: {registered} embeddings para {full_name}")
+        print(f"\n Registro completado: {registered} embeddings para {full_name}")
         return True
         
     except Exception as e:
