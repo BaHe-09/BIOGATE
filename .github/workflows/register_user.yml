@@ -1,4 +1,4 @@
-name: Facial Embeddings Registration
+name: Registro de los vectores faciales
 
 on:
   workflow_dispatch:
