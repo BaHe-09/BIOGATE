@@ -4,17 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       person_name:
-        description: 'Nombre de la persona'
+        description: 'Nombre de la persona (debe coincidir con la carpeta en dataset/)'
         required: true
         default: 'persona1'
+      skip_model_download:
+        description: 'Saltar descarga de modelos (útil para re-ejecuciones)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   register:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45  # Aumentado por posibles descargas grandes
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Para asegurar acceso completo al repo
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -22,25 +29,61 @@ jobs:
         python-version: '3.10'
     
     - name: Cache models
+      id: cache-models
       uses: actions/cache@v3
       with:
         path: |
           ~/.cache/ultralytics
           ~/.keras
+          ./models
         key: ${{ runner.os }}-models-${{ hashFiles('scripts/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-models-
+    
+    - name: Verify dataset
+      run: |
+        if [ ! -d "dataset/${{ inputs.person_name }}" ]; then
+          echo "::error::No existe la carpeta dataset/${{ inputs.person_name }}"
+          exit 1
+        fi
+        echo "✔ Carpeta de dataset verificada"
     
     - name: Install dependencies
       run: |
-        pip install --upgrade pip
-        pip install -r scripts/requirements.txt
+        python -m pip install --upgrade pip
+        pip install --no-cache-dir -r scripts/requirements.txt
         
     - name: Download YOLO model
+      if: ${{ !inputs.skip_model_download && !steps.cache-models.outputs.cache-hit }}
       run: |
         mkdir -p models
-        wget -O models/yolov8n-face-lindevs.pt https://github.com/lindevs/yolov8-face/releases/download/v0.0.1/yolov8n-face.pt
+        echo "Descargando modelo YOLO facial..."
+        wget -q --show-progress -O models/yolov8n-face-lindevs.pt \
+          https://github.com/lindevs/yolov8-face/releases/download/v0.0.1/yolov8n-face.pt
         
+        # Verificar integridad del modelo
+        filesize=$(wc -c <"models/yolov8n-face-lindevs.pt")
+        if [ "$filesize" -lt 10000000 ]; then
+          echo "::error::El modelo descargado es demasiado pequeño (posible error)"
+          exit 1
+        fi
+    
     - name: Run registration
       env:
         NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        PYTHONUNBUFFERED: 1  # Para ver logs en tiempo real
       run: |
-        python scripts/register_user.py --person_name ${{ inputs.person_name }}
+        python scripts/register_user.py \
+          --person_name "${{ inputs.person_name }}" \
+          --min_confidence 0.8 \
+          --max_images 30
+        
+    - name: Upload logs
+      if: always()  # Ejecutar siempre, incluso si falla
+      uses: actions/upload-artifact@v3
+      with:
+        name: registration-logs
+        path: |
+          *.log
+          debug/
+        retention-days: 1
