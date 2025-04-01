@@ -1,4 +1,4 @@
-name: Test Neon Connection
+name: Conexión con la base de datos Neon
 on: [push]
 
 jobs:
