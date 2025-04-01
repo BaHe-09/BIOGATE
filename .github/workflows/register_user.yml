@@ -11,13 +11,11 @@ on:
 jobs:
   register:
     runs-on: ubuntu-latest
-    timeout-minutes: 45  # Tiempo aumentado para instalación de dependencias
+    timeout-minutes: 45
 
     steps:
-    # Paso 1: Obtener el código del repositorio
+    # Paso 1: Obtener el código
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Para asegurar acceso completo al historial
 
     # Paso 2: Configurar Python
     - name: Set up Python 3.10
@@ -25,85 +23,46 @@ jobs:
       with:
         python-version: '3.10'
 
-    # Paso 3: Instalar dependencias del sistema
+    # Paso 3: Dependencias del sistema
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libgl1-mesa-glx libglib2.0-0
+        sudo apt-get install -y libgl1-mesa-glx
 
-    # Paso 4: Configurar caché para modelos
-    - name: Cache models and dependencies
+    # Paso 4: Cache
+    - name: Cache models
       uses: actions/cache@v3
-      id: cache
       with:
         path: |
           ~/.cache/ultralytics
           ~/.keras
-          ~/.cache/tensorflow
-          ~/.cache/torch
           ./models
         key: ${{ runner.os }}-models-${{ hashFiles('scripts/requirements.txt') }}
 
-    # Paso 5: Instalar dependencias de Python
+    # Paso 5: Instalar dependencias Python
     - name: Install Python packages
       run: |
         python -m pip install --upgrade pip
-        pip install --no-cache-dir -r scripts/requirements.txt
+        pip install -r scripts/requirements.txt
         pip install tensorflow-cpu==2.12.0
-        
-        # Verificar instalación
-        python -c "import tensorflow as tf; print(f'TensorFlow version: {tf.__version__}')"
-        python -c "from keras_facenet import FaceNet; print('FaceNet importado correctamente')"
 
-    # Paso 6: Descargar modelo YOLO (si no está en caché)
+    # Paso 6: Descargar modelo YOLO
     - name: Download YOLO model
-      if: steps.cache.outputs.cache-hit != 'true'
       run: |
         mkdir -p models
-        echo "Descargando modelo YOLOv8..."
         python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
-        
-        # Verificar descarga
-        if [ -f ~/.cache/ultralytics/yolov8n.pt ]; then
-          echo "Modelo descargado correctamente"
-        else
-          echo "::error::Fallo en la descarga del modelo"
-          exit 1
-        fi
 
-    # Paso 7: Verificar estructura de dataset
-    - name: Verify dataset structure
+    # Paso 7: Verificar dataset
+    - name: Verify dataset
       run: |
         if [ ! -d "dataset/${{ inputs.person_name }}" ]; then
-          echo "::error::No existe la carpeta dataset/${{ inputs.person_name }}"
+          echo "::error::No existe dataset/${{ inputs.person_name }}"
           exit 1
         fi
-        
-        count=$(ls -1 dataset/${{ inputs.person_name }}/*.{jpg,jpeg,png} 2>/dev/null | wc -l)
-        if [ "$count" -eq 0 ]; then
-          echo "::error::No hay imágenes en dataset/${{ inputs.person_name }}"
-          exit 1
-        fi
-        echo "✔ Dataset validado ($count imágenes encontradas)"
 
     # Paso 8: Ejecutar registro
-    - name: Run facial registration
+    - name: Run registration
       env:
         NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-        PYTHONUNBUFFERED: 1  # Para ver logs en tiempo real
       run: |
-        python scripts/register_user.py \
-          --person_name "${{ inputs.person_name }}" \
-          --min_confidence 0.7 \
-          --max_images 30
-
-    # Paso 9: Subir resultados (opcional)
-    - name: Upload registration logs
-      if: always()
-      uses: actions/upload-artifact@v3
-      with:
-        name: registration-logs-${{ inputs.person_name }}
-        path: |
-          *.log
-          debug/
-        retention-days: 1
+        python scripts/register_user.py --person_name "${{ inputs.person_name }}"
