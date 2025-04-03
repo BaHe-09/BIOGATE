@@ -4,7 +4,6 @@ import numpy as np
 import psycopg2
 from keras_facenet import FaceNet
 from ultralytics import YOLO
-from sklearn.metrics.pairwise import cosine_similarity
 import urllib.request
 import os
 from dotenv import load_dotenv
@@ -24,14 +23,13 @@ class FaceClassifier:
         return temp_file
         
     def extract_face(self, image_path):
-        """Extrae el rostro principal de una imagen con manejo robusto"""
+        """Extrae el rostro principal de una imagen"""
         img = cv2.imread(image_path)
         if img is None:
             raise ValueError("No se pudo cargar la imagen")
 
         results = self.yolo(img)
         
-        # Manejo seguro de resultados
         if not results or len(results[0].boxes) == 0:
             raise ValueError("No se detectaron rostros en la imagen")
             
@@ -39,7 +37,7 @@ class FaceClassifier:
         boxes = results[0].boxes
         main_box = boxes[np.argmax(boxes.conf.cpu().numpy())]
         
-        # Extraer coordenadas (manejo mejorado)
+        # Extraer coordenadas
         x1, y1, x2, y2 = map(int, main_box.xyxy[0].cpu().numpy())
         
         # Validar dimensiones
@@ -50,18 +48,25 @@ class FaceClassifier:
         return face
         
     def get_embedding(self, face_image):
-        """Genera embedding facial con preprocesamiento"""
+        """Genera embedding facial"""
         face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
         face_resized = cv2.resize(face_rgb, (160, 160))
-        return self.facenet.embeddings(np.expand_dims(face_resized, axis=0))[0]
+        embedding = self.facenet.embeddings(np.expand_dims(face_resized, axis=0))[0]
+        
+        if embedding.shape != (512,):
+            raise ValueError("Dimensión de embedding incorrecta")
+            
+        return embedding
         
     def query_database(self, embedding, threshold=0.75):
-    """Consulta la base de datos con conversión de tipo explícita"""
+        """Consulta la base de datos con manejo seguro de tipos"""
         try:
-            with self.db_conn.cursor() as cursor:
-                # Convertir el embedding a string formato PostgreSQL
-                embedding_str = "[" + ",".join(map(str, embedding.tolist())) + "]"
+            if not isinstance(embedding, np.ndarray) or embedding.shape != (512,):
+                raise ValueError("Embedding debe ser numpy array de 512D")
                 
+            embedding_list = embedding.tolist()
+            
+            with self.db_conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT p.id_persona, p.nombre, p.apellido_paterno, 
                            e.embedding, 
@@ -71,14 +76,16 @@ class FaceClassifier:
                     WHERE 1 - (e.embedding <=> %s::vector) > %s
                     ORDER BY similitud DESC
                     LIMIT 5
-                """, (embedding_str, embedding_str, threshold))
+                """, (str(embedding_list), str(embedding_list), float(threshold)))
+                
                 return cursor.fetchall()
+                
         except Exception as e:
             print(f"Error en consulta SQL: {str(e)}")
             return []
             
     def classify(self, image_url, threshold=0.75):
-        """Flujo completo con manejo de errores mejorado"""
+        """Flujo completo de clasificación"""
         temp_path = None
         try:
             print(f"\nClasificando imagen: {image_url}")
@@ -120,5 +127,6 @@ if __name__ == "__main__":
     if result:
         person_id, nombre, apellido, _, similitud = result
         print(f"\n✅ Mejor coincidencia: {nombre} {apellido} (ID: {person_id}) con similitud {similitud:.2f}")
+        exit(0)
     else:
         exit(1)
