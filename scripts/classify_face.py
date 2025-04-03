@@ -57,25 +57,25 @@ class FaceClassifier:
         
     def query_database(self, embedding, threshold=0.75):
     """Consulta la base de datos con conversión de tipo explícita"""
-    try:
-        with self.db_conn.cursor() as cursor:
-            # Convertir el embedding a string formato PostgreSQL
-            embedding_str = "[" + ",".join(map(str, embedding.tolist())) + "]"
-            
-            cursor.execute("""
-                SELECT p.id_persona, p.nombre, p.apellido_paterno, 
-                       e.embedding, 
-                       1 - (e.embedding <=> %s::vector) as similitud
-                FROM embeddings_faciales e
-                JOIN personas p ON e.id_persona = p.id_persona
-                WHERE 1 - (e.embedding <=> %s::vector) > %s
-                ORDER BY similitud DESC
-                LIMIT 5
-            """, (embedding_str, embedding_str, threshold))
-            return cursor.fetchall()
-    except Exception as e:
-        print(f"Error en consulta SQL: {str(e)}")
-        return []
+        try:
+            with self.db_conn.cursor() as cursor:
+                # Convertir el embedding a string formato PostgreSQL
+                embedding_str = "[" + ",".join(map(str, embedding.tolist())) + "]"
+                
+                cursor.execute("""
+                    SELECT p.id_persona, p.nombre, p.apellido_paterno, 
+                           e.embedding, 
+                           1 - (e.embedding <=> %s::vector) as similitud
+                    FROM embeddings_faciales e
+                    JOIN personas p ON e.id_persona = p.id_persona
+                    WHERE 1 - (e.embedding <=> %s::vector) > %s
+                    ORDER BY similitud DESC
+                    LIMIT 5
+                """, (embedding_str, embedding_str, threshold))
+                return cursor.fetchall()
+        except Exception as e:
+            print(f"Error en consulta SQL: {str(e)}")
+            return []
             
     def classify(self, image_url, threshold=0.75):
         """Flujo completo con manejo de errores mejorado"""
