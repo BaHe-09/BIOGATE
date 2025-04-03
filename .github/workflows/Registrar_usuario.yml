@@ -47,6 +47,6 @@ jobs:
       env:
         NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
       run: |
-        python scripts/register_user.py \
+        python scripts/Registrar_usuarios.py \
           --full_name "${{ inputs.full_name }}" \
           --folder_name "${{ inputs.folder_name }}"
