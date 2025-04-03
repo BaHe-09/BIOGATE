@@ -2,12 +2,12 @@ import argparse
 import cv2
 import numpy as np
 import psycopg2
-from dotenv import load_dotenv
 from keras_facenet import FaceNet
 from ultralytics import YOLO
 from sklearn.metrics.pairwise import cosine_similarity
 import urllib.request
 import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -24,45 +24,59 @@ class FaceClassifier:
         return temp_file
         
     def extract_face(self, image_path):
-        """Extrae el rostro principal de una imagen"""
+        """Extrae el rostro principal de una imagen con manejo robusto"""
         img = cv2.imread(image_path)
+        if img is None:
+            raise ValueError("No se pudo cargar la imagen")
+
         results = self.yolo(img)
-        boxes = results[0].boxes.xyxy.cpu().numpy() if results else []
         
-        if len(boxes) == 0:
+        # Manejo seguro de resultados
+        if not results or len(results[0].boxes) == 0:
             raise ValueError("No se detectaron rostros en la imagen")
             
-        # Tomar el rostro con mayor confianza
-        main_box = sorted(boxes, key=lambda x: x[4], reverse=True)[0]
-        x1, y1, x2, y2 = map(int, main_box[:4])
-        face = img[y1:y2, x1:x2]
+        # Obtener la caja con mayor confianza
+        boxes = results[0].boxes
+        main_box = boxes[np.argmax(boxes.conf.cpu().numpy())]
         
-        # Preprocesamiento para FaceNet
-        face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
-        face_resized = cv2.resize(face_rgb, (160, 160))
-        return face_resized
+        # Extraer coordenadas (manejo mejorado)
+        x1, y1, x2, y2 = map(int, main_box.xyxy[0].cpu().numpy())
+        
+        # Validar dimensiones
+        face = img[y1:y2, x1:x2]
+        if face.size == 0:
+            raise ValueError("El área del rostro es inválida")
+            
+        return face
         
     def get_embedding(self, face_image):
-        """Genera embedding facial"""
-        return self.facenet.embeddings(np.expand_dims(face_image, axis=0))[0]
+        """Genera embedding facial con preprocesamiento"""
+        face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
+        face_resized = cv2.resize(face_rgb, (160, 160))
+        return self.facenet.embeddings(np.expand_dims(face_resized, axis=0))[0]
         
-    def query_database(self, embedding, threshold):
-        """Consulta la base de datos por coincidencias"""
-        with self.db_conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT p.id_persona, p.nombre, p.apellido_paterno, 
-                       e.embedding, 
-                       1 - (e.embedding <=> %s) as similitud
-                FROM embeddings_faciales e
-                JOIN personas p ON e.id_persona = p.id_persona
-                WHERE 1 - (e.embedding <=> %s) > %s
-                ORDER BY similitud DESC
-                LIMIT 5
-            """, (embedding.tolist(), embedding.tolist(), threshold))
-            return cursor.fetchall()
+    def query_database(self, embedding, threshold=0.75):
+        """Consulta la base de datos con manejo seguro"""
+        try:
+            with self.db_conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT p.id_persona, p.nombre, p.apellido_paterno, 
+                           e.embedding, 
+                           1 - (e.embedding <=> %s) as similitud
+                    FROM embeddings_faciales e
+                    JOIN personas p ON e.id_persona = p.id_persona
+                    WHERE 1 - (e.embedding <=> %s) > %s
+                    ORDER BY similitud DESC
+                    LIMIT 5
+                """, (embedding.tolist(), embedding.tolist(), threshold))
+                return cursor.fetchall()
+        except Exception as e:
+            print(f"Error en consulta SQL: {str(e)}")
+            return []
             
     def classify(self, image_url, threshold=0.75):
-        """Flujo completo de clasificación"""
+        """Flujo completo con manejo de errores mejorado"""
+        temp_path = None
         try:
             print(f"\nClasificando imagen: {image_url}")
             temp_path = self.download_image(image_url)
@@ -80,16 +94,16 @@ class FaceClassifier:
                 person_id, nombre, apellido, _, similitud = match
                 print(f"{i}. {nombre} {apellido} - Similitud: {similitud:.2f}")
                 
-            best_match = matches[0]
-            return best_match
+            return matches[0]
             
         except Exception as e:
             print(f"\n❌ Error durante clasificación: {str(e)}")
             return None
         finally:
-            if os.path.exists(temp_path):
+            if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
-            self.db_conn.close()
+            if hasattr(self, 'db_conn') and self.db_conn:
+                self.db_conn.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -103,3 +117,5 @@ if __name__ == "__main__":
     if result:
         person_id, nombre, apellido, _, similitud = result
         print(f"\n✅ Mejor coincidencia: {nombre} {apellido} (ID: {person_id}) con similitud {similitud:.2f}")
+    else:
+        exit(1)
