@@ -20,12 +20,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.10
+    - name: Configuración de Python 3.10
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    - name: Install dependencies
+    - name: Instalar dependencias
       run: |
         sudo apt-get update
         sudo apt-get install -y libgl1 libglib2.0-0
@@ -33,7 +33,7 @@ jobs:
         pip install -r scripts/requirements.txt
         pip install tensorflow-cpu==2.12.0 opencv-python-headless
 
-    - name: Verify dataset folder
+    - name: Verificar la carpeta del dataset
       run: |
         if [ ! -d "dataset/${{ inputs.folder_name }}" ]; then
           echo "::error::Carpeta dataset/${{ inputs.folder_name }} no encontrada"
@@ -43,7 +43,7 @@ jobs:
         fi
         echo "✔ Carpeta dataset/${{ inputs.folder_name }} verificada"
 
-    - name: Run registration
+    - name: Registro del usuario
       env:
         NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
       run: |
