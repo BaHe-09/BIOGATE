@@ -30,7 +30,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libgl1 libglib2.0-0
         pip install --upgrade pip
-        pip install -r scripts/requirements.txt
+        pip install -r scripts/requerimientos.txt
         pip install tensorflow-cpu==2.12.0 opencv-python-headless
 
     - name: Verificar la carpeta del dataset
