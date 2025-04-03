@@ -1,9 +1,17 @@
-opencv-python>=4.7.0
+# Paquetes base
 numpy>=1.23.0
-psycopg2-binary>=2.9.6
+opencv-python-headless>=4.7.0  # Más ligero para CI/CD
 python-dotenv>=1.0.0
-ultralytics>=8.0.0
+
+# Base de datos
+psycopg2-binary>=2.9.6
+
+# Modelos IA
+tensorflow-cpu==2.12.0  # Versión exacta para compatibilidad
 keras-facenet>=0.0.5
-torch>=2.0.0
+ultralytics>=8.0.0
+torch>=2.0.0,<3.0.0  # Evita versiones incompatibles
+
+# Utilidades
 tqdm>=4.65.0
-tensorflow-cpu==2.12.0  # Versión ligera de TensorFlow
+scikit-learn>=1.2.0  # Para cálculo de similitud (cosine_similarity)
