@@ -12,7 +12,7 @@ TEST_ID = f"test_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
 def verify_tables(cursor):
     """Verifica la existencia de tablas esenciales"""
-    required_tables = {'personas', 'accesos', 'embeddings_faciales'}
+    required_tables = {'personas', 'historial_accesos', 'vectores_identificaciones'}
     cursor.execute("""
         SELECT table_name 
         FROM information_schema.tables 
@@ -38,10 +38,10 @@ def test_crud_operations(conn, existing_tables):
         
         # CREATE
         cursor.execute("""
-            INSERT INTO personas (nombre, apellido_paterno, email, google_id)
+            INSERT INTO personas (nombre, apellido_paterno, correo_electronico, google_id)
             VALUES (%s, %s, %s, %s)
             RETURNING id_persona
-        """, ('Test', 'GitHub', f'{TEST_ID}@example.com', TEST_ID))
+        """, ('Persona1', 'Prueba', f'{TEST_ID}@gmail.com', TEST_ID))
         persona_id = cursor.fetchone()[0]
         conn.commit()
         print(f"🔹 Persona insertada (ID: {persona_id})")
@@ -96,7 +96,7 @@ def test_connection():
             test_crud_operations(conn, existing_tables)
 
         # 5. Verificar índices (opcional)
-        if 'embeddings_faciales' in existing_tables:
+        if 'vectores_identificacion' in existing_tables:
             cursor.execute("""
                 SELECT indexname FROM pg_indexes 
                 WHERE tablename = 'embeddings_faciales'
@@ -106,8 +106,8 @@ def test_connection():
 
     except OperationalError as e:
         print(f"\n❌ Error de conexión: {e}")
-        print(f"ℹ️ ¿Estás seguro que NEON_DATABASE_URL está correctamente configurada?")
-        print(f"ℹ️ URL usada: {DATABASE_URL[:30]}...")  # Muestra solo parte inicial por seguridad
+        print(f" ¿Estás seguro que NEON_DATABASE_URL está correctamente configurada?")
+        print(f" URL usada: {DATABASE_URL[:30]}...")  # Muestra solo parte inicial por seguridad
     except Exception as e:
         print(f"\n⚠️ Error inesperado: {e}")
     finally:
