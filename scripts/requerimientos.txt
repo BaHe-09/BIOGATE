@@ -1,22 +1,22 @@
-# Paquetes base (core)
-numpy>=1.23.0,<2.0.0  # Evita posibles breaks con v2.x
+# Paquetes base
+numpy>=1.23.0,<2.0.0
 opencv-python-headless>=4.7.0,<5.0.0
 python-dotenv>=1.0.0
 
 # Base de datos
 psycopg2-binary>=2.9.6,<3.0.0
 
-# Modelos IA (computer vision)
-tensorflow-cpu==2.12.0  # Fixed para compatibilidad con FaceNet
-keras-facenet>=0.0.5,<1.0.0
-ultralytics>=8.0.0,<9.0.0  # Soporta YOLOv8-Face
-torch>=2.0.0,<3.0.0  # Versión compatible con ultralytics
+# Procesamiento de imágenes
+Pillow>=9.4.0,<10.0.0
 
-# Dependencias específicas para YOLOv8-Face
-onnxruntime>=1.14.0,<2.0.0  # Requerido para inferencia óptima
-scipy>=1.10.0  # Necesario para post-procesamiento
+# Modelos IA
+tensorflow-cpu==2.12.0
+keras-facenet>=0.0.5,<1.0.0
+ultralytics>=8.0.0,<9.0.0
+torch>=2.0.0,<3.0.0
+onnxruntime>=1.14.0,<2.0.0
 
 # Utilidades
 tqdm>=4.65.0,<5.0.0
-scikit-learn>=1.2.0,<2.0.0  # Para cosine_similarity
-Pillow>=9.4.0  # Manejo de imágenes alternativo
+scikit-learn>=1.2.0,<2.0.0
+scipy>=1.10.0,<2.0.0
