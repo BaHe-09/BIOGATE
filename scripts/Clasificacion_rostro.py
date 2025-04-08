@@ -91,7 +91,7 @@ class FaceClassifier:
             if embedding.shape != (512,):
                 raise ValueError("Dimensión de embedding incorrecta")
                 
-            print(f"🧠 Embedding generado en {(time.time()-start_time)*1000:.1f}ms")
+            print(f" Embedding generado en {(time.time()-start_time)*1000:.1f}ms")
             return embedding
             
         except Exception as e:
@@ -190,7 +190,7 @@ class FaceClassifier:
         """Flujo completo de clasificación con registro"""
         temp_path = None
         try:
-            print(f"\n🔍 Iniciando procesamiento de imagen: {image_url}")
+            print(f"\n Iniciando procesamiento de imagen: {image_url}")
             
             # Paso 1: Descargar y procesar imagen
             temp_path = self.descargar_imagen(image_url)
@@ -216,7 +216,7 @@ class FaceClassifier:
                     foto_url=image_url
                 )
                 
-                print("\n🎯 Resultado de clasificación:")
+                print("\n Resultado de clasificación:")
                 print(f"  - ID Persona: {persona_id}")
                 print(f"  - Nombre: {nombre} {apellido_p} {apellido_m or ''}")
                 print(f"  - Email: {email}")
@@ -252,7 +252,7 @@ class FaceClassifier:
         finally:
             if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
-            print("\n🏁 Proceso completado")
+            print("\n Proceso completado")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
