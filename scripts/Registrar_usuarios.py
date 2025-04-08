@@ -19,7 +19,7 @@ class ProcesadorFacial:
     def __init__(self):
         """Inicializa modelos YOLO y FaceNet desde carpeta models/"""
         try:
-            self.modelo_deteccion = YOLO('models/yolov8n-face.pt')
+            self.modelo_deteccion = YOLO('models/yolov8n-face-lindevs.pt')
             self.modelo_reconocimiento = FaceNet()
             print("✅ Modelos cargados correctamente")
         except Exception as e:
