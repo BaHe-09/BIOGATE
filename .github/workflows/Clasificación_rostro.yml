@@ -1,11 +1,14 @@
-name: Clasificación Facial
+name: Clasificación facial
 
 on:
   workflow_dispatch:
     inputs:
       image_url:
-        description: 'URL de la imagen a clasificar'
+        description: 'URL de la imagen (ej: https://github.com/user/repo/image.jpg)'
         required: true
+      threshold:
+        description: 'Umbral de confianza (0.5-0.9)'
+        default: '0.7'
 
 jobs:
   classify:
@@ -20,7 +23,8 @@ jobs:
           
       - name: Instalar dependencias
         run: |
-          pip install -r scripts/requerimientos.txt
+          pip install -r requirements.txt
+          pip install psycopg2-binary  # Asegura la instalación
           
       - name: Ejecutar clasificación
         env:
@@ -28,6 +32,4 @@ jobs:
         run: |
           python scripts/Clasificacion_rostro.py \
             --image_url "${{ inputs.image_url }}" \
-            --threshold 0.7
-            
-          echo "Resultado: $?"
+            --threshold ${{ inputs.threshold }}
