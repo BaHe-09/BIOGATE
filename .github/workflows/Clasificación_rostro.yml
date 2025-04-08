@@ -23,7 +23,7 @@ jobs:
           
       - name: Instalar dependencias
         run: |
-          pip install -r requirements.txt
+          pip install -r scripts/requerimientos.txt
           pip install psycopg2-binary  # Asegura la instalación
           
       - name: Ejecutar clasificación
