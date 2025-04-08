@@ -1,0 +1,37 @@
+name: Reconocimiento Facial
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_url:
+        description: 'URL pública de la imagen (http/https)'
+        required: true
+      threshold:
+        description: 'Umbral de confianza (0.5-0.9)'
+        default: '0.7'
+
+jobs:
+  recognize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+          
+      - name: Ejecutar reconocimiento
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          python scripts/Clasificacion_rostro.py \
+            --image_url "${{ inputs.image_url }}" \
+            --threshold ${{ inputs.threshold }}
+        
+      - name: Mostrar resultado
+        if: always()
+        run: echo "Código de salida: $?"
