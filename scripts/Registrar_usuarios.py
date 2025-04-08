@@ -17,7 +17,7 @@ class ProcesadorFacial:
     
     def __init__(self):
         """Inicializa modelos YOLO y FaceNet desde carpeta models/"""
-        self.modelo_deteccion = YOLO('models/yolov8n.pt')  # Cambiado a carpeta models
+        self.modelo_deteccion = YOLO('models/yolov8n-face-lindevs.pt')  # Cambiado a carpeta models
         self.modelo_reconocimiento = FaceNet()
     
     def procesar_imagen(self, ruta_imagen: str) -> Optional[List[np.ndarray]]:
