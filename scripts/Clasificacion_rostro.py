@@ -2,6 +2,7 @@ import argparse
 import cv2
 import numpy as np
 import psycopg2
+from psycopg2.extras import Json  # Importación crítica añadida
 from keras_facenet import FaceNet
 from ultralytics import YOLO
 import urllib.request
@@ -9,64 +10,93 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime
 import sys
+import time
 
 load_dotenv()
 
 class FaceClassifier:
     def __init__(self):
-        """Inicializa modelos y conexión a DB"""
+        """Inicializa modelos y conexión a DB con manejo de errores mejorado"""
         try:
-            # Modelos desde carpeta models/
-            self.yolo = YOLO('models/yolov8n-face-lindevs.pt')  # Usar modelo face específico
+            print("⏳ Inicializando modelos...")
+            start_time = time.time()
+            
+            # Carga modelos desde la carpeta models/
+            self.yolo = YOLO('models/yolov8n-face.pt')  # Modelo específico para rostros
             self.facenet = FaceNet()
             
-            # Conexión a Neon DB
+            # Conexión a Neon PostgreSQL
             self.db_conn = psycopg2.connect(os.getenv('NEON_DATABASE_URL'))
-            print("✅ Modelos y conexión a DB inicializados")
+            
+            print(f"✅ Modelos y DB inicializados en {(time.time()-start_time):.2f}s")
         except Exception as e:
             print(f"❌ Error en inicialización: {str(e)}")
             raise
 
     def descargar_imagen(self, url):
-        """Descarga imagen desde URL"""
+        """Descarga imagen desde URL con validación"""
+        if not url.startswith(('http://', 'https://')):
+            raise ValueError("URL debe comenzar con http:// o https://")
+            
         temp_file = "/tmp/temp_image.jpg"
-        urllib.request.urlretrieve(url, temp_file)
-        return temp_file
-        
+        try:
+            urllib.request.urlretrieve(url, temp_file)
+            if os.path.getsize(temp_file) == 0:
+                raise ValueError("Imagen descargada está vacía")
+            return temp_file
+        except Exception as e:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise ValueError(f"Error al descargar imagen: {str(e)}")
+
     def extraer_rostro(self, image_path):
         """Extrae el rostro principal con YOLOv8-Face"""
-        img = cv2.imread(image_path)
-        if img is None:
-            raise ValueError("No se pudo cargar la imagen")
+        try:
+            img = cv2.imread(image_path)
+            if img is None:
+                raise ValueError("No se pudo leer la imagen")
+            
+            start_time = time.time()
+            results = self.yolo(img)
+            inference_time = (time.time() - start_time) * 1000  # ms
+            
+            if not results or len(results[0].boxes) == 0:
+                raise ValueError("No se detectaron rostros")
+                
+            # Obtener la caja con mayor confianza
+            boxes = results[0].boxes
+            main_box = boxes[np.argmax(boxes.conf.cpu().numpy())]
+            x1, y1, x2, y2 = map(int, main_box.xyxy[0].cpu().numpy())
+            
+            # Validar y recortar rostro
+            face = img[y1:y2, x1:x2]
+            if face.size == 0:
+                raise ValueError("Área del rostro inválida")
+            
+            print(f"👤 Rostro detectado en {inference_time:.1f}ms | Dimensión: {face.shape}")
+            return face
+            
+        except Exception as e:
+            raise ValueError(f"Error en detección facial: {str(e)}")
 
-        results = self.yolo(img)
-        
-        if not results or len(results[0].boxes) == 0:
-            raise ValueError("No se detectaron rostros en la imagen")
-            
-        # Obtener la caja con mayor confianza
-        boxes = results[0].boxes
-        main_box = boxes[np.argmax(boxes.conf.cpu().numpy())]
-        x1, y1, x2, y2 = map(int, main_box.xyxy[0].cpu().numpy())
-        
-        # Validar y recortar rostro
-        face = img[y1:y2, x1:x2]
-        if face.size == 0:
-            raise ValueError("El área del rostro es inválida")
-            
-        return face
-        
     def generar_embedding(self, face_image):
         """Genera embedding facial con FaceNet"""
-        face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
-        face_resized = cv2.resize(face_rgb, (160, 160))
-        embedding = self.facenet.embeddings(np.expand_dims(face_resized, axis=0))[0]
-        
-        if embedding.shape != (512,):
-            raise ValueError("Dimensión de embedding incorrecta")
+        try:
+            start_time = time.time()
             
-        return embedding
-        
+            face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
+            face_resized = cv2.resize(face_rgb, (160, 160))
+            embedding = self.facenet.embeddings(np.expand_dims(face_resized, axis=0))[0]
+            
+            if embedding.shape != (512,):
+                raise ValueError("Dimensión de embedding incorrecta")
+                
+            print(f"🧠 Embedding generado en {(time.time()-start_time)*1000:.1f}ms")
+            return embedding
+            
+        except Exception as e:
+            raise ValueError(f"Error generando embedding: {str(e)}")
+
     def consultar_db(self, embedding, threshold=0.7):
         """Consulta la base de datos para coincidencias"""
         try:
@@ -74,7 +104,6 @@ class FaceClassifier:
                 raise ValueError("Embedding debe ser numpy array de 512D")
                 
             with self.db_conn.cursor() as cursor:
-                # Consulta mejorada con JOIN a personas
                 cursor.execute("""
                     SELECT p.id_persona, p.nombre, p.apellido_paterno, 
                            p.apellido_materno, p.correo_electronico,
@@ -88,15 +117,17 @@ class FaceClassifier:
                 
                 return cursor.fetchone()
                 
+        except psycopg2.Error as e:
+            print(f"❌ Error de base de datos: {str(e)}")
+            return None
         except Exception as e:
-            print(f"Error en consulta SQL: {str(e)}")
+            print(f"❌ Error inesperado en consulta: {str(e)}")
             return None
 
     def registrar_dispositivo(self):
         """Registra o obtiene dispositivo GitHub Camara"""
         try:
             with self.db_conn.cursor() as cursor:
-                # Buscar dispositivo existente
                 cursor.execute("""
                     SELECT id_dispositivo FROM dispositivos 
                     WHERE nombre = 'GitHub Camara' LIMIT 1
@@ -116,14 +147,14 @@ class FaceClassifier:
                     'GitHub Camara',
                     'Cámara',
                     'Servidor GitHub Actions',
-                    '192.168.1.100',  # IP de ejemplo
+                    '192.168.1.100',
                     'Activo'
                 ))
                 self.db_conn.commit()
                 return cursor.fetchone()[0]
                 
         except Exception as e:
-            print(f"Error al registrar dispositivo: {str(e)}")
+            print(f"❌ Error al registrar dispositivo: {str(e)}")
             self.db_conn.rollback()
             return None
 
@@ -142,12 +173,16 @@ class FaceClassifier:
                     resultado,
                     float(confianza),
                     foto_url,
-                    Json({"origen": "GitHub Actions", "modelo": "YOLOv8-Face + FaceNet"})
+                    Json({  # Usando el Json importado correctamente
+                        "origen": "GitHub Actions",
+                        "modelo": "YOLOv8-Face + FaceNet",
+                        "timestamp": datetime.now().isoformat()
+                    })
                 ))
                 self.db_conn.commit()
                 return cursor.fetchone()[0]
         except Exception as e:
-            print(f"Error al registrar acceso: {str(e)}")
+            print(f"❌ Error al registrar acceso: {str(e)}")
             self.db_conn.rollback()
             return None
 
@@ -155,7 +190,7 @@ class FaceClassifier:
         """Flujo completo de clasificación con registro"""
         temp_path = None
         try:
-            print(f"\n🔍 Procesando imagen: {image_url}")
+            print(f"\n🔍 Iniciando procesamiento de imagen: {image_url}")
             
             # Paso 1: Descargar y procesar imagen
             temp_path = self.descargar_imagen(image_url)
@@ -163,6 +198,7 @@ class FaceClassifier:
             embedding = self.generar_embedding(rostro)
             
             # Paso 2: Buscar en base de datos
+            print(f"🔎 Buscando coincidencias (umbral: {threshold})...")
             coincidencia = self.consultar_db(embedding, threshold)
             
             # Paso 3: Registrar dispositivo
@@ -181,11 +217,11 @@ class FaceClassifier:
                 )
                 
                 print("\n🎯 Resultado de clasificación:")
-                print(f"ID Persona: {persona_id}")
-                print(f"Nombre: {nombre} {apellido_p} {apellido_m or ''}")
-                print(f"Email: {email}")
-                print(f"Similitud: {similitud:.2%}")
-                print(f"ID Registro Acceso: {acceso_id}")
+                print(f"  - ID Persona: {persona_id}")
+                print(f"  - Nombre: {nombre} {apellido_p} {apellido_m or ''}")
+                print(f"  - Email: {email}")
+                print(f"  - Similitud: {similitud:.2%}")
+                print(f"  - ID Registro Acceso: {acceso_id}")
                 
                 return {
                     'status': 'success',
@@ -216,15 +252,17 @@ class FaceClassifier:
         finally:
             if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
+            print("\n🏁 Proceso completado")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Clasifica un rostro comparando con la base de datos y registra el acceso"
+        description="Sistema de reconocimiento facial - Compara rostros con la base de datos",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         "--image_url", 
         required=True,
-        help="URL de la imagen a clasificar"
+        help="URL pública de la imagen a clasificar (ej: https://example.com/foto.jpg)"
     )
     parser.add_argument(
         "--threshold", 
@@ -235,15 +273,20 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    classifier = FaceClassifier()
-    resultado = classifier.clasificar_rostro(args.image_url, args.threshold)
-    
-    if resultado['status'] == 'success':
-        print(f"\n✅ Clasificación exitosa")
-        sys.exit(0)
-    elif resultado['status'] == 'no_match':
-        print(f"\n⚠️ Coincidencia no encontrada")
-        sys.exit(2)
-    else:
-        print(f"\n❌ Error en el proceso")
+    try:
+        classifier = FaceClassifier()
+        resultado = classifier.clasificar_rostro(args.image_url, args.threshold)
+        
+        if resultado['status'] == 'success':
+            print(f"\n✅ CLASIFICACIÓN EXITOSA")
+            sys.exit(0)
+        elif resultado['status'] == 'no_match':
+            print(f"\n⚠️ COINCIDENCIA NO ENCONTRADA")
+            sys.exit(2)
+        else:
+            print(f"\n❌ ERROR EN EL PROCESO")
+            sys.exit(1)
+            
+    except KeyboardInterrupt:
+        print("\n🛑 Proceso interrumpido por el usuario")
         sys.exit(1)
