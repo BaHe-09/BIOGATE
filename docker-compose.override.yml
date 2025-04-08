@@ -1,0 +1,7 @@
+version: '3.8'  # Aunque es obsoleto, algunos lo necesitan
+
+services:
+  reconocimiento:
+    build:
+      args:
+        PIP_TIMEOUT: "300"  # 5 minutos

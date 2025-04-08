@@ -1,0 +1,10 @@
+services:
+  reconocimiento:
+    build: .
+    environment:
+      - NEON_DATABASE_URL=${NEON_DATABASE_URL}
+    devices:
+      - "/dev/video0:/dev/video0"
+    volumes:
+      - ./models:/app/models
+    privileged: true
