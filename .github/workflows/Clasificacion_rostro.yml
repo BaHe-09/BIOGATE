@@ -33,5 +33,5 @@ jobs:
             --threshold ${{ inputs.threshold }}
         
       - name: Mostrar resultado
-        if: always()
+        if: ${{ always() }}
         run: echo "Código de salida: $?"
