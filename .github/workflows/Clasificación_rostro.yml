@@ -1,4 +1,4 @@
-name: Reconocimiento Facial
+name: Reconocimiento facial
 
 on:
   workflow_dispatch:
