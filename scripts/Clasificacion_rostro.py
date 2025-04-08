@@ -2,7 +2,7 @@ import argparse
 import cv2
 import numpy as np
 import psycopg2
-from psycopg2.extras import Json  # Importación crítica añadida
+from psycopg2.extras import Json  
 from keras_facenet import FaceNet
 from ultralytics import YOLO
 import urllib.request
@@ -18,7 +18,7 @@ class FaceClassifier:
     def __init__(self):
         """Inicializa modelos y conexión a DB con manejo de errores mejorado"""
         try:
-            print("⏳ Inicializando modelos...")
+            print(" Inicializando modelos...")
             start_time = time.time()
             
             # Carga modelos desde la carpeta models/
