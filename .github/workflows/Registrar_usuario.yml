@@ -1,4 +1,4 @@
-name: Registro de los vectores faciales
+name: Registro de usuarios
 
 on:
   workflow_dispatch:
@@ -11,6 +11,14 @@ on:
         description: 'Nombre de la carpeta en dataset/ (ej. usuario1)'
         required: true
         default: 'persona1'
+      phone:
+        description: 'Teléfono (opcional)'
+        required: false
+        default: ''
+      email:
+        description: 'Email (opcional)'
+        required: false
+        default: ''
 
 jobs:
   register:
@@ -33,7 +41,15 @@ jobs:
         pip install -r scripts/requerimientos.txt
         pip install tensorflow-cpu==2.12.0 opencv-python-headless
 
-    - name: Verificar la carpeta del dataset
+    - name: Verificar carpeta de modelos
+      run: |
+        if [ ! -d "models" ]; then
+          echo "::error::Carpeta models/ no encontrada"
+          exit 1
+        fi
+        echo "✔ Carpeta models/ verificada"
+
+    - name: Verificar carpeta del dataset
       run: |
         if [ ! -d "dataset/${{ inputs.folder_name }}" ]; then
           echo "::error::Carpeta dataset/${{ inputs.folder_name }} no encontrada"
@@ -42,11 +58,37 @@ jobs:
           exit 1
         fi
         echo "✔ Carpeta dataset/${{ inputs.folder_name }} verificada"
+        echo "📌 Archivos encontrados:"
+        ls dataset/${{ inputs.folder_name }} | head -5
 
     - name: Registro del usuario
       env:
         NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
       run: |
-        python scripts/Registrar_usuarios.py \
-          --full_name "${{ inputs.full_name }}" \
-          --folder_name "${{ inputs.folder_name }}"
+        # Construcción dinámica del comando
+        COMANDO="python scripts/Registrar_usuarios.py \
+          --full_name \"${{ inputs.full_name }}\" \
+          --folder_name \"${{ inputs.folder_name }}\""
+        
+        # Añadir parámetros opcionales si existen
+        if [ -n "${{ inputs.phone }}" ]; then
+          COMANDO="$COMANDO --phone \"${{ inputs.phone }}\""
+        fi
+        
+        if [ -n "${{ inputs.email }}" ]; then
+          COMANDO="$COMANDO --email \"${{ inputs.email }}\""
+        fi
+        
+        # Ejecutar comando
+        echo "Comando ejecutado:"
+        echo "$COMANDO"
+        eval $COMANDO
+
+    - name: Verificar resultado
+      if: always()
+      run: |
+        echo "=== Resumen del registro ==="
+        echo "Nombre: ${{ inputs.full_name }}"
+        echo "Carpeta: dataset/${{ inputs.folder_name }}"
+        [ -n "${{ inputs.phone }}" ] && echo "Teléfono: ${{ inputs.phone }}"
+        [ -n "${{ inputs.email }}" ] && echo "Email: ${{ inputs.email }}"
