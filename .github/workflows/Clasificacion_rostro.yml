@@ -1,4 +1,4 @@
-name: Reconocimiento Facial
+name: Reconocimiento facial
 
 on:
   workflow_dispatch:
@@ -28,10 +28,8 @@ jobs:
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
+          echo "Iniciando reconocimiento facial..."
           python scripts/Clasificacion_rostro.py \
             --image_url "${{ inputs.image_url }}" \
             --threshold ${{ inputs.threshold }}
-        
-      - name: Mostrar resultado
-        if: ${{ always() }}
-        run: echo "Código de salida: $?"
+          echo "Código de salida: $?"
