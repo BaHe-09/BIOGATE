@@ -7,106 +7,238 @@ from ultralytics import YOLO
 import psycopg2
 from dotenv import load_dotenv
 from datetime import datetime
+from typing import List, Optional, Tuple, Dict
+import re
 
 load_dotenv()
 
-class FaceProcessor:
+class ProcesadorFacial:
+    """Clase para el procesamiento de rostros en imágenes"""
+    
     def __init__(self):
-        self.yolo = YOLO('yolov8n.pt')
-        self.facenet = FaceNet()
-
-    def process_image(self, img_path):
-        img = cv2.imread(img_path)
-        if img is None:
-            return None
+        """Inicializa modelos YOLO y FaceNet desde carpeta models/"""
+        self.modelo_deteccion = YOLO('models/yolov8n.pt')  # Cambiado a carpeta models
+        self.modelo_reconocimiento = FaceNet()
+    
+    def procesar_imagen(self, ruta_imagen: str) -> Optional[List[np.ndarray]]:
+        """
+        Detecta rostros y genera embeddings para una imagen
         
-        results = self.yolo(img)
-        boxes = results[0].boxes.xyxy.cpu().numpy() if results else []
-        
-        embeddings = []
-        for box in boxes:
-            x1, y1, x2, y2 = map(int, box)
-            face = img[y1:y2, x1:x2]
+        Args:
+            ruta_imagen: Path a la imagen a procesar
             
-            if face.size == 0:
-                continue
+        Returns:
+            Lista de embeddings faciales o None si hay error
+        """
+        try:
+            img = cv2.imread(ruta_imagen)
+            if img is None:
+                print(f"Error: No se pudo leer la imagen {ruta_imagen}")
+                return None
+            
+            # Detección de rostros
+            resultados = self.modelo_deteccion(img)
+            cajas = resultados[0].boxes.xyxy.cpu().numpy() if resultados else []
+            
+            embeddings = []
+            for caja in cajas:
+                x1, y1, x2, y2 = map(int, caja)
+                rostro = img[y1:y2, x1:x2]
                 
-            try:
-                face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
-                face_resized = cv2.resize(face_rgb, (160, 160))
-                embedding = self.facenet.embeddings(np.expand_dims(face_resized, axis=0))[0]
-                embeddings.append(embedding)
-            except Exception as e:
-                print(f"Error procesando imagen: {str(e)}")
-        
-        return embeddings
+                if rostro.size == 0:
+                    continue
+                    
+                try:
+                    # Preprocesamiento para FaceNet
+                    rostro_rgb = cv2.cvtColor(rostro, cv2.COLOR_BGR2RGB)
+                    rostro_redimensionado = cv2.resize(rostro_rgb, (160, 160))
+                    
+                    # Generar embedding
+                    embedding = self.modelo_reconocimiento.embeddings(
+                        np.expand_dims(rostro_redimensionado, axis=0)
+                    )[0]
+                    embeddings.append(embedding)
+                except Exception as e:
+                    print(f"Error procesando rostro: {str(e)}")
+            
+            return embeddings
+            
+        except Exception as e:
+            print(f"Error crítico en procesar_imagen: {str(e)}")
+            return None
 
-def register_person(full_name, folder_name):
-    conn = None
+def validar_email(email: str) -> bool:
+    """Valida el formato básico de un email"""
+    return bool(re.match(r"[^@]+@[^@]+\.[^@]+", email)) if email else True
+
+def registrar_persona_completa(
+    nombre_completo: str, 
+    nombre_carpeta: str,
+    telefono: Optional[str] = None,
+    email: Optional[str] = None
+) -> Dict[str, int]:
+    """
+    Registra una nueva persona con todos sus datos en la base de datos
+    
+    Args:
+        nombre_completo: Nombre completo (nombre apellido1 apellido2)
+        nombre_carpeta: Nombre de la carpeta en dataset/ con las imágenes
+        telefono: Número telefónico opcional
+        email: Email opcional
+        
+    Returns:
+        Dict con {
+            'status': 0=éxito, 1=error,
+            'id_persona': ID asignado,
+            'embeddings': cantidad registrada
+        }
+    """
+    resultado = {'status': 1, 'id_persona': None, 'embeddings': 0}
+    conexion = None
+    
     try:
+        # Validación de inputs
+        if not nombre_completo or not nombre_carpeta:
+            print("Error: Nombre completo y carpeta son requeridos")
+            return resultado
+            
+        if email and not validar_email(email):
+            print("Error: Formato de email inválido")
+            return resultado
+
         # Parsear nombre completo
-        parts = full_name.split()
-        nombre = parts[0]
-        apellido_paterno = parts[1] if len(parts) > 1 else "Apellido"
-        apellido_materno = parts[2] if len(parts) > 2 else None
+        partes = [p.strip() for p in nombre_completo.split(maxsplit=2)]
+        datos_persona = {
+            'nombre': partes[0],
+            'apellido_paterno': partes[1] if len(partes) > 1 else "",
+            'apellido_materno': partes[2] if len(partes) > 2 else None,
+            'telefono': telefono,
+            'email': email or f"{partes[0].lower()}.{partes[1].lower() if len(partes) > 1 else 'user'}@example.com"
+        }
+
+        # Verificar carpeta de imágenes
+        ruta_carpeta = os.path.join("dataset", nombre_carpeta)
+        if not os.path.exists(ruta_carpeta):
+            print(f"Error: Carpeta {ruta_carpeta} no existe")
+            return resultado
 
         # Conectar a DB
-        conn = psycopg2.connect(os.getenv('NEON_DATABASE_URL'))
-        cursor = conn.cursor()
+        conexion = psycopg2.connect(os.getenv('NEON_DATABASE_URL'))
+        cursor = conexion.cursor()
         
-        # Registrar persona
+        # Registrar persona con todos los campos
         cursor.execute(
             """INSERT INTO personas 
-            (nombre, apellido_paterno, apellido_materno, email) 
-            VALUES (%s, %s, %s, %s)
+            (nombre, apellido_paterno, apellido_materno, telefono, correo_electronico, activo) 
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id_persona""",
             (
-                nombre,
-                apellido_paterno,
-                apellido_materno,
-                f"{nombre.lower()}.{apellido_paterno.lower()}@example.com"
+                datos_persona['nombre'],
+                datos_persona['apellido_paterno'],
+                datos_persona['apellido_materno'],
+                datos_persona['telefono'],
+                datos_persona['email'],
+                True  # Siempre activo al registrar
             )
         )
-        person_id = cursor.fetchone()[0]
+        id_persona = cursor.fetchone()[0]
+        resultado['id_persona'] = id_persona
         
         # Procesar imágenes
-        processor = FaceProcessor()
-        registered = 0
-        folder_path = os.path.join("dataset", folder_name)
+        procesador = ProcesadorFacial()
+        archivos_procesados = 0
+        embeddings_registrados = 0
         
-        for filename in os.listdir(folder_path):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                img_path = os.path.join(folder_path, filename)
-                embeddings = processor.process_image(img_path)
+        for archivo in os.listdir(ruta_carpeta):
+            if archivo.lower().endswith(('.png', '.jpg', '.jpeg')):
+                ruta_imagen = os.path.join(ruta_carpeta, archivo)
+                embeddings = procesador.procesar_imagen(ruta_imagen)
+                archivos_procesados += 1
                 
                 if embeddings:
                     for emb in embeddings:
                         cursor.execute(
-                            """INSERT INTO embeddings_faciales 
-                            (id_persona, embedding, dispositivo_registro) 
-                            VALUES (%s, %s, %s)""",
-                            (person_id, emb.tolist(), 'GitHub Actions')
+                            """INSERT INTO vectores_identificacion 
+                            (id_persona, vector, dispositivo_registro, modelo) 
+                            VALUES (%s, %s, %s, %s)""",
+                            (id_persona, emb.tolist(), 'GitHub Actions', 'Facenet')
                         )
-                    registered += len(embeddings)
+                    embeddings_registrados += len(embeddings)
         
-        conn.commit()
-        print(f"\n Registro completado: {registered} embeddings para {full_name}")
-        return True
+        conexion.commit()
+        resultado['embeddings'] = embeddings_registrados
+        resultado['status'] = 0
         
+        print(f"\n✅ Registro completado - ID: {id_persona}")
+        print(f"📊 Resumen:")
+        print(f"  - Nombre: {datos_persona['nombre']} {datos_persona['apellido_paterno']}")
+        print(f"  - Email: {datos_persona['email']}")
+        print(f"  - Teléfono: {datos_persona['telefono'] or 'No proporcionado'}")
+        print(f"  - Imágenes procesadas: {archivos_procesados}")
+        print(f"  - Embeddings registrados: {embeddings_registrados}")
+        
+    except psycopg2.Error as e:
+        print(f"❌ Error de base de datos: {str(e)}")
+        if conexion:
+            conexion.rollback()
     except Exception as e:
-        print(f"❌ Error en registro: {str(e)}")
-        if conn:
-            conn.rollback()
-        return False
+        print(f"❌ Error inesperado: {str(e)}")
+        if conexion:
+            conexion.rollback()
     finally:
-        if conn:
-            conn.close()
+        if conexion:
+            conexion.close()
+    
+    return resultado
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--full_name", required=True, help="Nombre completo con apellidos")
-    parser.add_argument("--folder_name", required=True, help="Nombre de la carpeta en dataset/")
+    parser = argparse.ArgumentParser(
+        description="Registra una nueva persona con todos sus datos y embeddings faciales")
+    
+    parser.add_argument(
+        "--full_name", 
+        required=True, 
+        help="Nombre completo con formato 'Nombre Apellido1 Apellido2'")
+    
+    parser.add_argument(
+        "--folder_name", 
+        required=True, 
+        help="Nombre de la carpeta dentro de dataset/ que contiene las imágenes")
+    
+    parser.add_argument(
+        "--phone",
+        required=False,
+        default=None,
+        help="Número de teléfono (opcional)")
+    
+    parser.add_argument(
+        "--email",
+        required=False,
+        default=None,
+        help="Email (opcional)")
+    
     args = parser.parse_args()
+    
+    print(f"\n=== INICIANDO REGISTRO COMPLETO ===")
+    print(f"👤 Nombre: {args.full_name}")
+    print(f"📁 Carpeta: dataset/{args.folder_name}")
+    if args.phone:
+        print(f"📞 Teléfono: {args.phone}")
+    if args.email:
+        print(f"✉️ Email: {args.email}")
+    
+    resultado = registrar_persona_completa(
+        args.full_name,
+        args.folder_name,
+        args.phone,
+        args.email
+    )
+    
+    if resultado['status'] != 0:
+        print("\n❌ El registro no se completó correctamente")
+        exit(1)
+    
+    exit(0)
     
     print(f"\n=== INICIANDO REGISTRO PARA {args.full_name.upper()} ===")
     print(f"Buscando imágenes en: dataset/{args.folder_name}")
