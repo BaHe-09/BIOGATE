@@ -1,4 +1,4 @@
-name: Registro de usuarios
+name: Registro de usuarios con vectores faciales
 
 on:
   workflow_dispatch:
@@ -6,11 +6,9 @@ on:
       full_name:
         description: 'Nombre completo (ej. Juan Pérez López)'
         required: true
-        default: 'Usuario Prueba'
       folder_name:
         description: 'Nombre de la carpeta en dataset/ (ej. usuario1)'
         required: true
-        default: 'persona1'
       phone:
         description: 'Teléfono (opcional)'
         required: false
@@ -28,7 +26,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Configuración de Python 3.10
+    - name: Configurar Python 3.10
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
@@ -38,57 +36,30 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libgl1 libglib2.0-0
         pip install --upgrade pip
-        pip install -r scripts/requerimientos.txt
-        pip install tensorflow-cpu==2.12.0 opencv-python-headless
+        pip install -r requirements.txt
 
-    - name: Verificar carpeta de modelos
+    - name: Verificar estructura de proyecto
       run: |
-        if [ ! -d "models" ]; then
-          echo "::error::Carpeta models/ no encontrada"
-          exit 1
-        fi
-        echo "✔ Carpeta models/ verificada"
-
-    - name: Verificar carpeta del dataset
-      run: |
-        if [ ! -d "dataset/${{ inputs.folder_name }}" ]; then
-          echo "::error::Carpeta dataset/${{ inputs.folder_name }} no encontrada"
-          echo "Las carpetas disponibles son:"
-          ls dataset/ || echo "No hay carpetas en dataset/"
-          exit 1
-        fi
-        echo "✔ Carpeta dataset/${{ inputs.folder_name }} verificada"
-        echo "📌 Archivos encontrados:"
-        ls dataset/${{ inputs.folder_name }} | head -5
+        echo "Estructura del proyecto:"
+        ls -R models/ || echo "No hay carpeta models/"
+        ls -R dataset/ || echo "No hay carpeta dataset/"
 
     - name: Registro del usuario
       env:
         NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
       run: |
-        # Construcción dinámica del comando
+        set -e
         COMANDO="python scripts/Registrar_usuarios.py \
           --full_name \"${{ inputs.full_name }}\" \
           --folder_name \"${{ inputs.folder_name }}\""
         
-        # Añadir parámetros opcionales si existen
-        if [ -n "${{ inputs.phone }}" ]; then
-          COMANDO="$COMANDO --phone \"${{ inputs.phone }}\""
-        fi
+        [ -n "${{ inputs.phone }}" ] && COMANDO="$COMANDO --phone \"${{ inputs.phone }}\""
+        [ -n "${{ inputs.email }}" ] && COMANDO="$COMANDO --email \"${{ inputs.email }}\""
         
-        if [ -n "${{ inputs.email }}" ]; then
-          COMANDO="$COMANDO --email \"${{ inputs.email }}\""
-        fi
-        
-        # Ejecutar comando
-        echo "Comando ejecutado:"
-        echo "$COMANDO"
-        eval $COMANDO
+        echo "Ejecutando: $COMANDO"
+        eval $COMANDO || exit 1
 
     - name: Verificar resultado
       if: always()
       run: |
-        echo "=== Resumen del registro ==="
-        echo "Nombre: ${{ inputs.full_name }}"
-        echo "Carpeta: dataset/${{ inputs.folder_name }}"
-        [ -n "${{ inputs.phone }}" ] && echo "Teléfono: ${{ inputs.phone }}"
-        [ -n "${{ inputs.email }}" ] && echo "Email: ${{ inputs.email }}"
+        echo "Estado de salida: $?"
