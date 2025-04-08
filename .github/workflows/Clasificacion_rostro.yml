@@ -22,7 +22,7 @@ jobs:
           python-version: '3.10'
           
       - name: Instalar dependencias
-        run: pip install -r requirements.txt
+        run: pip install -r scripts/requerimientos.txt
           
       - name: Ejecutar reconocimiento
         env:
