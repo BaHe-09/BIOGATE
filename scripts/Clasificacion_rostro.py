@@ -22,7 +22,7 @@ class FaceClassifier:
             start_time = time.time()
             
             # Carga modelos desde la carpeta models/
-            self.yolo = YOLO('models/yolov8n-face.pt')  # Modelo específico para rostros
+            self.yolo = YOLO('models/yolov8n-face-lindevs.pt')  # Modelo específico para rostros
             self.facenet = FaceNet()
             
             # Conexión a Neon PostgreSQL
