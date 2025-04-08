@@ -56,7 +56,7 @@ def probar_operaciones_vectores(conexion):
             
             # Búsqueda por similitud
             cursor.execute("""
-                SELECT id_persona, vector <-> %s AS distancia
+                SELECT id_persona, vector <-> %s::vector AS distancia
                 FROM vectores_identificacion
                 ORDER BY distancia
                 LIMIT 1
