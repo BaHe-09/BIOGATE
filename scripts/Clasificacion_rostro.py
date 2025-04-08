@@ -17,7 +17,7 @@ class FaceClassifier:
         """Inicializa modelos y conexión a DB"""
         try:
             # Modelos desde carpeta models/
-            self.yolo = YOLO('models/yolov8n-face.pt')  # Usar modelo face específico
+            self.yolo = YOLO('models/yolov8n-face-lindevs.pt')  # Usar modelo face específico
             self.facenet = FaceNet()
             
             # Conexión a Neon DB
