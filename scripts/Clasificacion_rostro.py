@@ -7,23 +7,34 @@ from ultralytics import YOLO
 import urllib.request
 import os
 from dotenv import load_dotenv
+from datetime import datetime
+import sys
 
 load_dotenv()
 
 class FaceClassifier:
     def __init__(self):
-        self.yolo = YOLO('yolov8n.pt')
-        self.facenet = FaceNet()
-        self.db_conn = psycopg2.connect(os.getenv('NEON_DATABASE_URL'))
-        
-    def download_image(self, url):
+        """Inicializa modelos y conexión a DB"""
+        try:
+            # Modelos desde carpeta models/
+            self.yolo = YOLO('models/yolov8n-face.pt')  # Usar modelo face específico
+            self.facenet = FaceNet()
+            
+            # Conexión a Neon DB
+            self.db_conn = psycopg2.connect(os.getenv('NEON_DATABASE_URL'))
+            print("✅ Modelos y conexión a DB inicializados")
+        except Exception as e:
+            print(f"❌ Error en inicialización: {str(e)}")
+            raise
+
+    def descargar_imagen(self, url):
         """Descarga imagen desde URL"""
         temp_file = "/tmp/temp_image.jpg"
         urllib.request.urlretrieve(url, temp_file)
         return temp_file
         
-    def extract_face(self, image_path):
-        """Extrae el rostro principal de una imagen"""
+    def extraer_rostro(self, image_path):
+        """Extrae el rostro principal con YOLOv8-Face"""
         img = cv2.imread(image_path)
         if img is None:
             raise ValueError("No se pudo cargar la imagen")
@@ -36,19 +47,17 @@ class FaceClassifier:
         # Obtener la caja con mayor confianza
         boxes = results[0].boxes
         main_box = boxes[np.argmax(boxes.conf.cpu().numpy())]
-        
-        # Extraer coordenadas
         x1, y1, x2, y2 = map(int, main_box.xyxy[0].cpu().numpy())
         
-        # Validar dimensiones
+        # Validar y recortar rostro
         face = img[y1:y2, x1:x2]
         if face.size == 0:
             raise ValueError("El área del rostro es inválida")
             
         return face
         
-    def get_embedding(self, face_image):
-        """Genera embedding facial"""
+    def generar_embedding(self, face_image):
+        """Genera embedding facial con FaceNet"""
         face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
         face_resized = cv2.resize(face_rgb, (160, 160))
         embedding = self.facenet.embeddings(np.expand_dims(face_resized, axis=0))[0]
@@ -58,75 +67,183 @@ class FaceClassifier:
             
         return embedding
         
-    def query_database(self, embedding, threshold=0.75):
-        """Consulta la base de datos con manejo seguro de tipos"""
+    def consultar_db(self, embedding, threshold=0.7):
+        """Consulta la base de datos para coincidencias"""
         try:
             if not isinstance(embedding, np.ndarray) or embedding.shape != (512,):
                 raise ValueError("Embedding debe ser numpy array de 512D")
                 
-            embedding_list = embedding.tolist()
-            
             with self.db_conn.cursor() as cursor:
+                # Consulta mejorada con JOIN a personas
                 cursor.execute("""
                     SELECT p.id_persona, p.nombre, p.apellido_paterno, 
-                           e.embedding, 
-                           1 - (e.embedding <=> %s::vector) as similitud
-                    FROM embeddings_faciales e
-                    JOIN personas p ON e.id_persona = p.id_persona
-                    WHERE 1 - (e.embedding <=> %s::vector) > %s
+                           p.apellido_materno, p.correo_electronico,
+                           1 - (v.vector <=> %s::vector) as similitud
+                    FROM vectores_identificacion v
+                    JOIN personas p ON v.id_persona = p.id_persona
+                    WHERE 1 - (v.vector <=> %s::vector) > %s
                     ORDER BY similitud DESC
-                    LIMIT 5
-                """, (str(embedding_list), str(embedding_list), float(threshold)))
+                    LIMIT 1
+                """, (embedding.tolist(), embedding.tolist(), float(threshold)))
                 
-                return cursor.fetchall()
+                return cursor.fetchone()
                 
         except Exception as e:
             print(f"Error en consulta SQL: {str(e)}")
-            return []
-            
-    def classify(self, image_url, threshold=0.75):
-        """Flujo completo de clasificación"""
+            return None
+
+    def registrar_dispositivo(self):
+        """Registra o obtiene dispositivo GitHub Camara"""
+        try:
+            with self.db_conn.cursor() as cursor:
+                # Buscar dispositivo existente
+                cursor.execute("""
+                    SELECT id_dispositivo FROM dispositivos 
+                    WHERE nombre = 'GitHub Camara' LIMIT 1
+                """)
+                dispositivo = cursor.fetchone()
+                
+                if dispositivo:
+                    return dispositivo[0]
+                
+                # Crear nuevo dispositivo si no existe
+                cursor.execute("""
+                    INSERT INTO dispositivos 
+                    (nombre, tipo, ubicacion, direccion_ip, estado)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id_dispositivo
+                """, (
+                    'GitHub Camara',
+                    'Cámara',
+                    'Servidor GitHub Actions',
+                    '192.168.1.100',  # IP de ejemplo
+                    'Activo'
+                ))
+                self.db_conn.commit()
+                return cursor.fetchone()[0]
+                
+        except Exception as e:
+            print(f"Error al registrar dispositivo: {str(e)}")
+            self.db_conn.rollback()
+            return None
+
+    def registrar_acceso(self, persona_id, dispositivo_id, confianza, foto_url="", resultado="Éxito"):
+        """Registra intento de acceso en historial"""
+        try:
+            with self.db_conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO historial_accesos 
+                    (id_persona, id_dispositivo, resultado, confianza, foto_url, metadatos)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id_acceso
+                """, (
+                    persona_id,
+                    dispositivo_id,
+                    resultado,
+                    float(confianza),
+                    foto_url,
+                    Json({"origen": "GitHub Actions", "modelo": "YOLOv8-Face + FaceNet"})
+                ))
+                self.db_conn.commit()
+                return cursor.fetchone()[0]
+        except Exception as e:
+            print(f"Error al registrar acceso: {str(e)}")
+            self.db_conn.rollback()
+            return None
+
+    def clasificar_rostro(self, image_url, threshold=0.7):
+        """Flujo completo de clasificación con registro"""
         temp_path = None
         try:
-            print(f"\nClasificando imagen: {image_url}")
-            temp_path = self.download_image(image_url)
-            face = self.extract_face(temp_path)
-            embedding = self.get_embedding(face)
+            print(f"\n🔍 Procesando imagen: {image_url}")
             
-            matches = self.query_database(embedding, threshold)
+            # Paso 1: Descargar y procesar imagen
+            temp_path = self.descargar_imagen(image_url)
+            rostro = self.extraer_rostro(temp_path)
+            embedding = self.generar_embedding(rostro)
             
-            if not matches:
+            # Paso 2: Buscar en base de datos
+            coincidencia = self.consultar_db(embedding, threshold)
+            
+            # Paso 3: Registrar dispositivo
+            dispositivo_id = self.registrar_dispositivo()
+            if not dispositivo_id:
+                raise ValueError("No se pudo obtener ID de dispositivo")
+            
+            # Paso 4: Registrar resultado
+            if coincidencia:
+                persona_id, nombre, apellido_p, apellido_m, email, similitud = coincidencia
+                acceso_id = self.registrar_acceso(
+                    persona_id=persona_id,
+                    dispositivo_id=dispositivo_id,
+                    confianza=similitud,
+                    foto_url=image_url
+                )
+                
+                print("\n🎯 Resultado de clasificación:")
+                print(f"ID Persona: {persona_id}")
+                print(f"Nombre: {nombre} {apellido_p} {apellido_m or ''}")
+                print(f"Email: {email}")
+                print(f"Similitud: {similitud:.2%}")
+                print(f"ID Registro Acceso: {acceso_id}")
+                
+                return {
+                    'status': 'success',
+                    'persona_id': persona_id,
+                    'similitud': similitud,
+                    'acceso_id': acceso_id
+                }
+            else:
+                acceso_id = self.registrar_acceso(
+                    persona_id=None,
+                    dispositivo_id=dispositivo_id,
+                    confianza=0,
+                    foto_url=image_url,
+                    resultado="Fallo"
+                )
                 print("\n🔍 No se encontraron coincidencias por encima del umbral")
-                return None
+                return {
+                    'status': 'no_match',
+                    'acceso_id': acceso_id
+                }
                 
-            print("\n🎯 Resultados de clasificación:")
-            for i, match in enumerate(matches, 1):
-                person_id, nombre, apellido, _, similitud = match
-                print(f"{i}. {nombre} {apellido} - Similitud: {similitud:.2f}")
-                
-            return matches[0]
-            
         except Exception as e:
             print(f"\n❌ Error durante clasificación: {str(e)}")
-            return None
+            return {
+                'status': 'error',
+                'error': str(e)
+            }
         finally:
             if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
-            if hasattr(self, 'db_conn') and self.db_conn:
-                self.db_conn.close()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--image_url", required=True, help="URL de la imagen a clasificar")
-    parser.add_argument("--threshold", type=float, default=0.75, help="Umbral de similitud (0-1)")
+    parser = argparse.ArgumentParser(
+        description="Clasifica un rostro comparando con la base de datos y registra el acceso"
+    )
+    parser.add_argument(
+        "--image_url", 
+        required=True,
+        help="URL de la imagen a clasificar"
+    )
+    parser.add_argument(
+        "--threshold", 
+        type=float, 
+        default=0.7,
+        help="Umbral de similitud (0.5-0.9)"
+    )
+    
     args = parser.parse_args()
     
     classifier = FaceClassifier()
-    result = classifier.classify(args.image_url, args.threshold)
+    resultado = classifier.clasificar_rostro(args.image_url, args.threshold)
     
-    if result:
-        person_id, nombre, apellido, _, similitud = result
-        print(f"\n✅ Mejor coincidencia: {nombre} {apellido} (ID: {person_id}) con similitud {similitud:.2f}")
-        exit(0)
+    if resultado['status'] == 'success':
+        print(f"\n✅ Clasificación exitosa")
+        sys.exit(0)
+    elif resultado['status'] == 'no_match':
+        print(f"\n⚠️ Coincidencia no encontrada")
+        sys.exit(2)
     else:
-        exit(1)
+        print(f"\n❌ Error en el proceso")
+        sys.exit(1)
