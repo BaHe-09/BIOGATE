@@ -1,50 +1,34 @@
-# Welcome to your Expo app 👋
+Estado actual del sistema BioGate – Conexión frontend con backend
+El proyecto BioGate ya cuenta con dos componentes clave completamente desarrollados:
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Frontend móvil desarrollado con React Native utilizando expo-router, donde ya se han implementado todas las pantallas principales: inicio de sesión, historial de accesos, detalle de usuario, registro de nuevo usuario, y configuración del sistema.
 
-## Get started
+Backend desplegado en la plataforma Render, con una base de datos PostgreSQL alojada en Neon, el cual expone rutas API para realizar operaciones como login, registro, consulta y gestión de accesos.
 
-1. Install dependencies
+Actualmente, la única etapa pendiente es establecer la conexión entre el frontend y el backend, de forma que los datos utilizados en la aplicación móvil ya no estén simulados o escritos directamente en el código, sino que provengan de la base de datos real mediante peticiones HTTP.
 
-   ```bash
-   npm install
-   ```
+Objetivos de esta fase
+Validar el inicio de sesión de los usuarios utilizando datos reales desde la base de datos.
 
-2. Start the app
+Consultar y mostrar en la aplicación los registros reales de accesos.
 
-   ```bash
-    npx expo start
-   ```
+Registrar nuevos usuarios y guardar esa información de manera persistente en la base de datos.
 
-In the output, you'll find options to open the app in a
+Mostrar datos individuales de un usuario al seleccionarlo, directamente desde la fuente real.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Preparar el sistema para futuras operaciones como edición o eliminación de registros desde la app.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Pasos necesarios
+Establecer la dirección del backend como punto de entrada para todas las peticiones desde el frontend.
 
-## Get a fresh project
+Reemplazar los datos simulados (por ejemplo, accesos o usuarios definidos manualmente) por datos obtenidos desde el backend mediante solicitudes GET y POST.
 
-When you're ready, run:
+Enviar los formularios desde la app (como el de inicio de sesión o registro) al backend utilizando el formato requerido por las rutas existentes.
 
-```bash
-npm run reset-project
-```
+Manejar correctamente la respuesta del servidor, incluyendo casos de éxito, error, validaciones y mensajes informativos para el usuario.
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Agregar indicadores de carga o mensajes de espera mientras se procesan las peticiones, para mejorar la experiencia de usuario.
 
-## Learn more
+Validar la seguridad y consistencia de los datos, asegurando que la aplicación reaccione adecuadamente ante errores de red o problemas del servidor.
 
-To learn more about developing your project with Expo, look at the following resources:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
